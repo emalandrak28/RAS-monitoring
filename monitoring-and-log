@@ -31,23 +31,23 @@ logger = logging.getLogger(__name__)
 IOT_HUB = "demo.thingsboard.io"
 PORT = 1883
 MQTT_TOPIC = "v1/devices/me/telemetry"
-PUSHOVER_TOKEN = "PUSHOVER_TOKEN"
-PUSHOVER_USER = "PUSHOVER_USER"
+PUSHOVER_TOKEN = "PUSHOVER_TOKEN" #ADD THE APPROPRIATE TOKEN FROM PUSHOVER
+PUSHOVER_USER = "PUSHOVER_USER" #ADD THE APPROPRIATE USER FROM PUSHOVER
 PUBLISH_INTERVAL = 600  # 10 minutes in seconds
 SAMPLE_COUNT = 10
 DISCARD_COUNT = 2  # Discard 2 highest and 2 lowest samples
 
-# Device credentials
+# Device credentials (ADD THE APPROPRIATE CREDENTIALS FROM THINGSBOARD PLATFORM)
 DEVICE_CREDENTIALS = {
     "temperature": "TEMPERATURE_CREDENTIAL",
     "pH": "pH_CREDENTIAL",
     "conductivity": "CONDUCTIVITY_CREDENTIAL",
     "level": "LEVEL_CREDENTIAL",
-    "recirc_pump": "RECIRCULATION_PUMP_CREDENTAL",
+    "recirc_pump": "RECIRCULATION_PUMP_CREDENTIAL",
     "dispense_pump": "DISPENSING_PUMP_CREDENTIAL"
 }
 
-# Thresholds for alerts
+# Thresholds for alerts (PLEASE CHANGE THE THRESHOLDS FOR ALERTS)
 ALERT_THRESHOLDS = {
     "temp_low": 19.0,
     "temp_high": 23.0,
@@ -132,7 +132,7 @@ class SensorMonitor:
         def ph_measurement():
             chan = AnalogIn(self.ads, ADS.P0)
             voltage = chan.voltage
-            return round((-6.02987 * voltage + 21.91), 2)
+            return round((-6.02987 * voltage + 21.91), 2) #This should be calibrated accordingly
         
         self.sensor_data["pH"] = self.get_filtered_sample(ph_measurement)
 
@@ -141,7 +141,7 @@ class SensorMonitor:
         def conductivity_measurement():
             chan = AnalogIn(self.ads, ADS.P1)
             voltage = chan.voltage
-            return round((779.3 * voltage - 302.46), 0)
+            return round((779.3 * voltage - 302.46), 0) #This should be calibrated accordingly
         
         self.sensor_data["conductivity"] = self.get_filtered_sample(conductivity_measurement)
 
@@ -268,10 +268,10 @@ class SensorMonitor:
             ]
             csv_line = f"{timestamp},{','.join(map(str, data))}\n"
             
-            with open('water_temp2.csv', 'a') as f:
+            with open('LOG_FILE.csv', 'a') as f: #The LOG_FILE.csv should be precreated
                 f.write(csv_line)
             
-            shutil.copy("water_temp2.csv", "/media/RASPBERRY/RASPBERRY/water_temp2.csv")
+            shutil.copy("LOG_FILE.csv", "/media/RASPBERRY/RASPBERRY/LOG_FILE.csv")
         except Exception as e:
             logger.error(f"Data logging failed: {str(e)}")
 
