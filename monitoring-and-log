@@ -1,0 +1,351 @@
+#!/usr/bin/env python3
+import board
+import busio
+import time
+import adafruit_ads1x15.ads1115 as ADS
+from adafruit_ads1x15.analog_in import AnalogIn
+import datetime
+import http.client
+import urllib
+import RPi.GPIO as GPIO
+from ds18b20 import DS18B20
+import paho.mqtt.client as mqtt
+import json
+import shutil
+from threading import Timer
+import logging
+import statistics
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('ras_monitor.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Configuration constants
+IOT_HUB = "demo.thingsboard.io"
+PORT = 1883
+MQTT_TOPIC = "v1/devices/me/telemetry"
+PUSHOVER_TOKEN = "PUSHOVER_TOKEN"
+PUSHOVER_USER = "PUSHOVER_USER"
+PUBLISH_INTERVAL = 600  # 10 minutes in seconds
+SAMPLE_COUNT = 10
+DISCARD_COUNT = 2  # Discard 2 highest and 2 lowest samples
+
+# Device credentials
+DEVICE_CREDENTIALS = {
+    "temperature": "TEMPERATURE_CREDENTIAL",
+    "pH": "pH_CREDENTIAL",
+    "conductivity": "CONDUCTIVITY_CREDENTIAL",
+    "level": "LEVEL_CREDENTIAL",
+    "recirc_pump": "RECIRCULATION_PUMP_CREDENTAL",
+    "dispense_pump": "DISPENSING_PUMP_CREDENTIAL"
+}
+
+# Thresholds for alerts
+ALERT_THRESHOLDS = {
+    "temp_low": 19.0,
+    "temp_high": 23.0,
+    "ph_low": 6.90,
+    "ph_high": 8.50,
+    "level_low": 1540,
+    "level_high": 2195,
+    "pump_current_low": 100
+}
+
+class SensorMonitor:
+    def __init__(self):
+        # Initialize GPIO for ultrasonic sensor
+        GPIO.setmode(GPIO.BCM)
+        self.GPIO_TRIG = 15
+        self.GPIO_ECHO = 14
+        GPIO.setup(self.GPIO_TRIG, GPIO.OUT)
+        GPIO.setup(self.GPIO_ECHO, GPIO.IN)
+
+        # Initialize I2C and ADS1115
+        self.i2c = busio.I2C(board.SCL, board.SDA)
+        self.ads = ADS.ADS1115(self.i2c, address=0x49)
+
+        # Initialize MQTT clients
+        self.clients = {}
+        for name, username in DEVICE_CREDENTIALS.items():
+            client = mqtt.Client()
+            client.username_pw_set(username)
+            try:
+                client.connect(IOT_HUB, PORT, keepalive=60)
+                client.loop_start()
+                self.clients[name] = client
+                logger.info(f"MQTT client for {name} initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize MQTT client for {name}: {str(e)}")
+
+        # Sensor data cache
+        self.sensor_data = {
+            "temperature": None,
+            "pH": None,
+            "conductivity": None,
+            "level": None,
+            "recirc_pump": None,
+            "dispense_pump": None
+        }
+
+        # Timer control
+        self._timer = None
+        self._running = False
+
+    def get_filtered_sample(self, sensor_func, samples=SAMPLE_COUNT, discard=DISCARD_COUNT):
+        """
+        Take multiple samples, discard outliers, and return average of middle values
+        Args:
+            sensor_func: Function that returns a single measurement
+            samples: Total number of samples to take
+            discard: Number of high/low samples to discard from each end
+        Returns:
+            Average of the middle samples or None if measurement fails
+        """
+        try:
+            readings = []
+            for _ in range(samples):
+                reading = sensor_func()
+                if reading is not None:
+                    readings.append(reading)
+                time.sleep(0.1)  # Short delay between samples
+            
+            if len(readings) < (samples - discard*2):
+                logger.warning(f"Insufficient valid samples: {len(readings)}/{samples}")
+                return None
+                
+            readings.sort()
+            valid_samples = readings[discard:-discard] if discard > 0 else readings
+            return round(statistics.mean(valid_samples), 2)
+        except Exception as e:
+            logger.error(f"Filtered sampling error: {str(e)}")
+            return None
+
+    def measure_ph(self):
+        """Measure pH value with outlier rejection"""
+        def ph_measurement():
+            chan = AnalogIn(self.ads, ADS.P0)
+            voltage = chan.voltage
+            return round((-6.02987 * voltage + 21.91), 2)
+        
+        self.sensor_data["pH"] = self.get_filtered_sample(ph_measurement)
+
+    def measure_conductivity(self):
+        """Measure conductivity with outlier rejection"""
+        def conductivity_measurement():
+            chan = AnalogIn(self.ads, ADS.P1)
+            voltage = chan.voltage
+            return round((779.3 * voltage - 302.46), 0)
+        
+        self.sensor_data["conductivity"] = self.get_filtered_sample(conductivity_measurement)
+
+    def measure_rpump(self):
+        """Measure recirculating pump with outlier rejection"""
+        def rpump_measurement():
+            chan = AnalogIn(self.ads, ADS.P2)
+            voltage = round(chan.voltage, 2)
+            return round(abs((voltage - 2.57)) * 6000, 0)
+        
+        self.sensor_data["recirc_pump"] = self.get_filtered_sample(rpump_measurement)
+
+    def measure_dpump(self):
+        """Measure dispensing pump with outlier rejection"""
+        def dpump_measurement():
+            chan = AnalogIn(self.ads, ADS.P3)
+            voltage = round(chan.voltage, 2)
+            return round(abs((voltage - 2.57)) * 4000, 0)
+        
+        self.sensor_data["dispense_pump"] = self.get_filtered_sample(dpump_measurement)
+
+    def measure_water_level(self):
+        """Measure water level with outlier rejection"""
+        def level_measurement():
+            GPIO.output(self.GPIO_TRIG, GPIO.LOW)
+            time.sleep(0.1)
+            GPIO.output(self.GPIO_TRIG, GPIO.HIGH)
+            time.sleep(0.00001)
+            GPIO.output(self.GPIO_TRIG, GPIO.LOW)
+            
+            pulse_start = time.time()
+            timeout = pulse_start + 0.04
+            
+            while GPIO.input(self.GPIO_ECHO) == 0 and pulse_start < timeout:
+                pulse_start = time.time()
+            
+            pulse_end = time.time()
+            while GPIO.input(self.GPIO_ECHO) == 1 and pulse_end < timeout:
+                pulse_end = time.time()
+            
+            if pulse_start >= timeout or pulse_end >= timeout:
+                return None
+                
+            pulse_duration = pulse_end - pulse_start
+            dist = 83.0 - round(pulse_duration * 17150, 1)
+            return round(dist * 46.72, 0)
+        
+        self.sensor_data["level"] = self.get_filtered_sample(level_measurement)
+
+    def measure_temperature(self):
+        """Measure temperature from DS18B20 sensor"""
+        try:
+            sensor = DS18B20()
+            temp = sensor.get_temperature()
+            if temp is not None:
+                self.sensor_data["temperature"] = round((temp + 0.7), 1)
+            else:
+                self.sensor_data["temperature"] = None
+        except Exception as e:
+            logger.error(f"Temperature measurement error: {str(e)}")
+            self.sensor_data["temperature"] = None
+
+    def send_pushover_notification(self, message):
+        """Send notification via Pushover"""
+        try:
+            conn = http.client.HTTPSConnection("api.pushover.net:443")
+            conn.request("POST", "/1/messages.json",
+                urllib.parse.urlencode({
+                    "token": PUSHOVER_TOKEN,
+                    "user": PUSHOVER_USER,
+                    "message": message,
+                }), {"Content-type": "application/x-www-form-urlencoded"})
+            response = conn.getresponse()
+            if response.status != 200:
+                logger.error(f"Pushover notification failed: {response.status} {response.reason}")
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to send Pushover notification: {str(e)}")
+
+    def check_alerts(self):
+        """Check sensor readings against thresholds"""
+        alerts = []
+        
+        if self.sensor_data["temperature"] is not None:
+            if self.sensor_data["temperature"] < ALERT_THRESHOLDS["temp_low"]:
+                alerts.append(f"Temperature low: {self.sensor_data['temperature']}°C")
+            elif self.sensor_data["temperature"] > ALERT_THRESHOLDS["temp_high"]:
+                alerts.append(f"Temperature high: {self.sensor_data['temperature']}°C")
+        
+ #       if self.sensor_data["pH"] is not None:
+ #           if self.sensor_data["pH"] < ALERT_THRESHOLDS["ph_low"]:
+ #               alerts.append(f"pH low: {self.sensor_data['pH']}")
+ #           elif self.sensor_data["pH"] > ALERT_THRESHOLDS["ph_high"]:
+ #               alerts.append(f"pH high: {self.sensor_data['pH']}")
+        
+        if self.sensor_data["level"] is not None:
+            if self.sensor_data["level"] < ALERT_THRESHOLDS["level_low"]:
+                alerts.append(f"Water level low: {self.sensor_data['level']}L")
+            elif self.sensor_data["level"] > ALERT_THRESHOLDS["level_high"]:
+                alerts.append(f"Water level high: {self.sensor_data['level']}L")
+        
+        if self.sensor_data["recirc_pump"] is not None:
+            if self.sensor_data["recirc_pump"] < ALERT_THRESHOLDS["pump_current_low"]:
+                alerts.append(f"Recirc pump current low: {self.sensor_data['recirc_pump']}RPM")
+        
+        if self.sensor_data["dispense_pump"] is not None:
+            if self.sensor_data["dispense_pump"] < ALERT_THRESHOLDS["pump_current_low"]:
+                alerts.append(f"Dispense pump current low: {self.sensor_data['dispense_pump']}RPM")
+        
+        if alerts:
+            self.send_pushover_notification("RAS Alerts:\n" + "\n".join(alerts))
+
+    def log_data(self):
+        """Log data to CSV file"""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d,%H:%M:%S")
+            data = [
+                self.sensor_data["temperature"] or "",
+                self.sensor_data["pH"] or "",
+                self.sensor_data["conductivity"] or "",
+                self.sensor_data["level"] or "",
+                self.sensor_data["recirc_pump"] or "",
+                self.sensor_data["dispense_pump"] or ""
+            ]
+            csv_line = f"{timestamp},{','.join(map(str, data))}\n"
+            
+            with open('water_temp2.csv', 'a') as f:
+                f.write(csv_line)
+            
+            shutil.copy("water_temp2.csv", "/media/RASPBERRY/RASPBERRY/water_temp2.csv")
+        except Exception as e:
+            logger.error(f"Data logging failed: {str(e)}")
+
+    def publish_data(self):
+        """Publish all sensor data to MQTT"""
+        try:
+            for sensor_name, value in self.sensor_data.items():
+                if value is not None and sensor_name in self.clients:
+                    payload = json.dumps({sensor_name: value})
+                    self.clients[sensor_name].publish(MQTT_TOPIC, payload, qos=1)
+            
+            logger.info("Data published to MQTT")
+        except Exception as e:
+            logger.error(f"MQTT publish failed: {str(e)}")
+
+    def collect_and_publish(self):
+        """Main collection and publishing routine"""
+        if not self._running:
+            return
+            
+        try:
+            logger.info("Starting sensor data collection cycle")
+            
+            # Measure all sensors
+            self.measure_temperature()
+            self.measure_ph()
+            self.measure_conductivity()
+            self.measure_rpump()
+            self.measure_dpump()
+            self.measure_water_level()
+
+            # Process data
+            self.publish_data()
+            self.log_data()
+            self.check_alerts()
+
+            logger.info(f"Completed cycle at {datetime.datetime.now()}")
+        except Exception as e:
+            logger.error(f"Collection cycle failed: {str(e)}")
+        finally:
+            if self._running:
+                self._timer = Timer(PUBLISH_INTERVAL, self.collect_and_publish)
+                self._timer.start()
+
+    def run(self):
+        """Start the monitoring system"""
+        self._running = True
+        logger.info("Starting RAS monitoring system")
+        self.collect_and_publish()
+
+    def stop(self):
+        """Stop the monitoring system"""
+        self._running = False
+        if self._timer:
+            self._timer.cancel()
+        logger.info("Monitoring system stopped")
+
+    def cleanup(self):
+        """Clean up resources"""
+        self.stop()
+        GPIO.cleanup()
+        for client in self.clients.values():
+            client.disconnect()
+        logger.info("System cleanup completed")
+
+if __name__ == "__main__":
+    monitor = SensorMonitor()
+    try:
+        monitor.run()
+        while monitor._running:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt")
+    except Exception as e:
+        logger.error(f"Fatal error: {str(e)}")
+    finally:
+        monitor.cleanup()
