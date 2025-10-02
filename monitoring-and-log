@@ -37,6 +37,9 @@ PUBLISH_INTERVAL = 600  # 10 minutes in seconds
 SAMPLE_COUNT = 10
 DISCARD_COUNT = 2  # Discard 2 highest and 2 lowest samples
 
+#SSL/TLS Configuration
+CA_CERTS_PATH = "/etc/ssl/certs/ca-certificates.crt"
+
 # Device credentials (ADD THE APPROPRIATE CREDENTIALS FROM THINGSBOARD PLATFORM)
 DEVICE_CREDENTIALS = {
     "temperature": "TEMPERATURE_CREDENTIAL",
