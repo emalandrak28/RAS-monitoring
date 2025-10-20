@@ -8,7 +8,7 @@ The primary purpose of this system is to automate the monitoring of a sensitive 
 -   Data Acquisition: Reads from multiple analog and digital sensors.
 -   Data Processing: Applies statistical filtering to reduce noise and outliers.
 -   Data Logging: Saves all readings with timestamps to a local CSV file and creates a backup.
--   Data Transmission: Publishes each sensor's data to its respective device on a ThingsBoard IoT platform via MQTT (monitoring and log) or via HTTPS (secure_monitoring and log_UPS)
+-   Data Transmission: Publishes each sensor's data to its respective device on a ThingsBoard IoT platform via  via HTTPS
 -   Alerting: Evaluates readings against predefined thresholds and sends immediate push notifications to a phone via Pushover if any parameter is out of bounds.
 -   Robustness: Includes comprehensive error handling and logging to ensure long-term, unattended operation.
 
@@ -23,7 +23,7 @@ The primary purpose of this system is to automate the monitoring of a sensitive 
     -   Ultrasonic Sensor (JSN-SR04T): Used for non-contact water level measurement in a sump or tank. GPIO pins trigger and read the echo.
     -   Current Sensors (ACS712-20A): Two sensors connected to the ADS1115 to measure the current draw (and infer operation) of the recirculating and dispensing pumps.
 -   Software/Protocols:
-    -   MQTT or HTTPS: A lightweight messaging protocol for IoT. Used to send data to ThingsBoard.
+    -   HTTPS: A lightweight messaging protocol for IoT. Used to send data to ThingsBoard.
     -   ThingsBoard: An open-source IoT platform for data visualization, storage, and device management.
     -   Pushover: A service for sending real-time push notifications to mobile devices.
     -   Logging Module: For detailed, timestamped status updates and error tracking.
@@ -35,12 +35,12 @@ The primary purpose of this system is to automate the monitoring of a sensitive 
 3.  Data Collection: Each sensor is read multiple times, and a filtered average is computed.
 4.  Data Transmission: The filtered data is published to ThingsBoard and logged to the CSV file.
 5.  Alert Check: Values are checked against thresholds. Alerts are sent immediately if needed.
-6.  Wait: The method schedules itself to run again after a 10-minute (`PUBLISH_INTERVAL`) sleep.
-7.  Termination: If a keyboard interrupt (Ctrl+C) or error occurs, the loop is stopped, and resources are cleaned up gracefully.
+6.  Wait: The method schedules itself to run again after a 10-minute sleep.
+7.  Termination: If a keyboard interrupt (Ctrl+C) or error occurs, the loop is stopped, and resources are cleaned up gracefully. The system closes if UPS battery falls under 10%.
 
  5. Configuration and Constants
 
-The script is highly configurable through constants defined at the top:
+The script is highly configurable through constants defined at files RAS.env and config.yaml
 -   Cloud Settings: ThingsBoard host, topic, and device access tokens.
 -   Alerting Settings: Pushover API keys and user key.
 -   Timing: Interval between readings (`PUBLISH_INTERVAL`).
