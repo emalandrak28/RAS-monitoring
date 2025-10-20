@@ -1,4 +1,6 @@
-Comprehensive Description: RAS (Recirculating Aquaculture System) Monitor
+Description: RAS (Recirculating Aquaculture System) Monitor
+
+Installation details in installation.txt
 
 This Python script implements a robust, multi-sensor monitoring and alerting system designed for a Recirculating Aquaculture System (RAS). It runs on a Raspberry Pi and continuously tracks critical water quality and equipment parameters, publishing the data to a cloud dashboard (ThingsBoard) and triggering instant mobile alerts if any values fall outside safe operating ranges. The system works with a UPS HAT (battery) to perform even with current shortages
 
