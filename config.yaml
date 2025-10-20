@@ -1,5 +1,3 @@
-# Raspi Aquarium Monitor - Main Configuration
-
 # Alert System (Pushover)
 pushover:
   token: "YOUR_PUSHOVER_APP_TOKEN"  # Replace with your real token
