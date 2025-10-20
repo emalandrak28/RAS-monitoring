@@ -29,7 +29,7 @@ alert_thresholds:
 
 # UPS Emergency Settings
 ups:
-  check_interval: 60      # Check battery every 60 seconds
+  check_interval: 300      # Check battery every 5 minutes (300 seconds)
   shutdown_threshold: 10  # Shut down if battery drops to 10%
   i2c_address: 0x42       # Hardware address for UPS module
 
