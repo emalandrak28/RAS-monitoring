@@ -1,0 +1,208 @@
+RAS Monitoring System - Complete Setup Guide
+
+📋 PREREQUISITES
+
+Hardware Requirements:
+- Raspberry Pi (3/4/Zero) with Raspbian OS
+- ADS1115 ADC Converter
+- DS18B20 Temperature Sensor
+- Ultrasonic Distance Sensor (HC-SR04)
+- pH and Conductivity Sensors
+- Waveshare UPS HAT (recommended)
+- Various pumps and relays
+- Internet connection
+
+Software Requirements:
+- Python 3.7+
+- pip package manager
+- Git
+
+Accounts Needed:
+- Pushover account (https://pushover.net) for mobile notifications
+- ThingsBoard account (https://thingsboard.io) for cloud dashboard (optional)
+
+STEP-BY-STEP INSTALLATION
+
+Step 1: Clone the Repository
+git clone https://github.com/yourusername/RAS-monitoring.git
+cd RAS-monitoring
+
+Step 2: Set Up Environment Configuration
+cp passwords.env
+nano passwords.env
+
+Fill in passwords.env with your actual credentials:
+PUSHOVER_TOKEN="your_actual_pushover_app_token_here"
+PUSHOVER_USER="your_actual_pushover_user_key_here"
+TB_TEMPERATURE_TOKEN="your_temperature_device_token"
+TB_PH_TOKEN="your_ph_device_token"
+TB_CONDUCTIVITY_TOKEN="your_conductivity_token"
+TB_LEVEL_TOKEN="your_level_token"
+TB_RECIRC_PUMP_TOKEN="your_recirc_pump_token"
+TB_DISPENSE_PUMP_TOKEN="your_dispense_pump_token"
+TB_UPS_BATTERY_TOKEN="your_ups_battery_token"
+
+Step 3: Install Python Dependencies
+pip install -r requirements.txt or install each one individually
+
+Step 4: Configure Hardware Settings
+nano config.yaml
+
+Key settings to verify:
+alert_thresholds:
+  temp_low: 19.0    # Adjust low temperature alert threshold
+  temp_high: 23.0   # Adjust high temperature alert threshold
+  ph_low: 6.90      # Adjust low pH alert threshold
+  ph_high: 8.50     # Adjust high pH alert threshold
+
+Step 5: Enable I2C and GPIO (Raspberry Pi)
+sudo raspi-config
+# Navigate to: Interface Options → I2C → Enable
+# Navigate to: Interface Options → 1-Wire → Enable
+sudo reboot
+
+Step 6: Hardware Wiring Verification
+- ADS1115 connected to I2C pins (SDA, SCL)
+- DS18B20 connected to 1-Wire pin
+- Ultrasonic sensor connected to GPIO 14 & 15
+- UPS HAT properly installed
+- Power supply connected
+
+Step 7: Test Sensor Communication
+sudo i2cdetect -y 1    # Check if ADS1115 detected at 0x48
+ls /sys/bus/w1/devices/ # Check if DS18B20 detected
+
+Step 8: Run the System
+python ras_monitor.py
+
+Check for successful startup:
+2024-01-15 10:00:00 - INFO - Starting RAS monitoring system with UPS protection
+2024-01-15 10:00:00 - INFO - UPS shutdown threshold: 10%
+
+PUSHOVER SETUP (MOBILE NOTIFICATIONS)
+
+1. Go to https://pushover.net/
+2. Sign up for free account
+3. Install Pushover app on mobile device
+4. Get User Key from main page
+5. Create Application for API Token
+6. Add tokens to passwords.env
+
+THINGSBOARD SETUP (CLOUD DASHBOARD - OPTIONAL)
+
+1. Go to https://thingsboard.io/
+2. Sign up for free cloud edition
+3. Create devices for each sensor type
+4. Get Access Tokens for each device
+5. Add tokens to passwords.env
+
+PROJECT STRUCTURE
+
+ras_monitoring/
+├── ras_monitor.py          # Main monitoring application
+├── config.yaml             # Configuration settings & thresholds
+├── passwords.env           # API keys & device tokens (PRIVATE)
+├── passwords.env.example   # Template for environment variables
+├── requirements.txt        # Python dependencies
+├── ras_monitor.log         # System logs (auto-generated)
+└── LOGFILE.csv            # Sensor data records (auto-generated)
+
+🔧 CONFIGURATION DETAILS
+
+Sensor Calibration:
+Edit config.yaml calibration section:
+calibration:
+  temperature_offset: 0.7  # Add/subtract to match reference thermometer
+  ph_formula: "-6.02987 * voltage + 21.91"  # Adjust coefficients
+
+Alert Threshold Customization:
+alert_thresholds:
+  temp_low: 19.0    # Adjust low temperature alert threshold
+  temp_high: 23.0   # Adjust high temperature alert threshold
+  ph_low: 6.90      # Adjust low pH alert threshold
+  ph_high: 8.50     # Adjust high pH alert threshold
+
+SYSTEM OPERATION
+
+Normal Operation:
+- Sensors read every 10 minutes
+- Data logged to local CSV file
+- Data sent to ThingsBoard (if configured)
+- UPS battery checked every 5 minutes
+- Alerts sent for threshold violations
+
+Emergency Operation:
+- Low battery warning at 30%
+- Emergency shutdown at 10% battery
+- Emergency notifications before shutdown
+- Data preservation during shutdown
+
+ALERT SYSTEM
+
+Multi-Level Alert System:
+Battery Level Monitoring:
+100% - 30%:  Normal operation
+30% - 10%:   Warning notification (Pushover)
+Below 10%:   Emergency shutdown procedure
+
+Temperature Monitoring (according to the settings):
+19°C - 23°C: Normal range
+<19°C or >23°C: Alert notification
+
+TROUBLESHOOTING COMMON ISSUES
+
+Module not found errors:
+pip install --force-reinstall -r requirements.txt
+
+I2C devices not detected:
+sudo raspi-config  # Enable I2C in Interface Options
+sudo i2cdetect -y 1
+
+GPIO permission errors:
+sudo usermod -a -G gpio $USER
+sudo reboot
+
+Pushover notifications not working:
+Verify tokens in passwords.env
+Check internet connectivity
+
+Sensor readings inaccurate:
+Check wiring connections
+Calibrate sensors with known values
+Update calibration formulas in config.yaml
+
+MONITORING SYSTEM OUTPUTS
+
+Log Files:
+- ras_monitor.log - System operations and errors
+- LOGFILE.csv - Timestamped sensor data
+
+Data Format (LOGFILE.csv):
+timestamp,temperature,pH,conductivity,level,recirc_pump,dispense_pump,ups_battery
+
+SAFETY NOTES
+
+- Always disconnect power before working with wiring
+- Regular sensor calibration recommended
+- Keep backups of configuration files
+- Test alert system regularly
+- Monitor UPS battery health
+
+QUICK START (5-MINUTE SETUP)
+
+1. git clone https://github.com/yourusername/RAS-monitoring.git
+2. cd RAS-monitoring
+3. cp passwords.env.example passwords.env
+4. Edit passwords.env with your API keys
+5. pip install -r requirements.txt
+6. python ras_monitor.py
+
+VERIFICATION CHECKLIST
+
+- All files in same folder
+- passwords.env filled with real API keys
+- Raspberry Pi interfaces enabled (I2C, 1-Wire)
+- Sensors properly wired and detected
+- System starts without errors
+- First data cycle completes after 10 minutes
+- Pushover alerts received on phone
