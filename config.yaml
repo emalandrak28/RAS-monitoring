@@ -1,0 +1,42 @@
+# Raspi Aquarium Monitor - Main Configuration
+
+# Alert System (Pushover)
+pushover:
+  token: "YOUR_PUSHOVER_APP_TOKEN"  # Replace with your real token
+  user: "YOUR_PUSHOVER_USER_KEY"    # Replace with your real user key
+
+# Cloud Dashboard (ThingsBoard)
+thingsboard:
+  url: "https://demo.thingsboard.io"
+  port: 443
+  device_credentials:
+    temperature: "TEMPERATURE_DEVICE_TOKEN"
+    pH: "PH_DEVICE_TOKEN"
+    conductivity: "CONDUCTIVITY_DEVICE_TOKEN"
+    level: "LEVEL_DEVICE_TOKEN"
+    recirc_pump: "RECIRC_PUMP_DEVICE_TOKEN"
+    dispense_pump: "DISPENSE_PUMP_DEVICE_TOKEN"
+    ups_battery: "UPS_BATTERY_DEVICE_TOKEN"
+
+# Safety Thresholds (Change these for your specific aquarium)
+alert_thresholds:
+  temp_low: 19.0
+  temp_high: 23.0
+  ph_low: 6.90
+  ph_high: 8.50
+  level_low: 1540
+  level_high: 2195
+  pump_current_low: 100
+  ups_battery_low: 30
+
+# UPS Emergency Settings
+ups:
+  check_interval: 60      # Check battery every 60 seconds
+  shutdown_threshold: 10  # Shut down if battery drops to 10%
+  i2c_address: 0x42       # Hardware address for UPS module
+
+# Sampling Settings
+sensors:
+  sample_count: 10        # Take 10 readings and average them
+  discard_count: 2        # Throw away the 2 highest & lowest readings
+  publish_interval: 600   # Send data to cloud every 10 minutes
