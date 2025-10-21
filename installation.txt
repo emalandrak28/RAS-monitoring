@@ -24,7 +24,7 @@ Accounts Needed:
 STEP-BY-STEP INSTALLATION
 
 Step 1: Clone the Repository
-git clone https://github.com/yourusername/RAS-monitoring.git
+git clone https://github.com/emalandrak28/RAS-monitoring.git
 cd RAS-monitoring
 
 Step 2: Set Up Environment Configuration
@@ -54,6 +54,11 @@ alert_thresholds:
   temp_high: 23.0   # Adjust high temperature alert threshold
   ph_low: 6.90      # Adjust low pH alert threshold
   ph_high: 8.50     # Adjust high pH alert threshold
+  level_low: 1540   # Adjust the lowest water volume
+  level_high: 2195  # Adjust the highest water volume
+  pump_current_low: 100  # Adjust the current low
+  ups_battery_low: 30 # Battery level at 30%
+  shutdown_threshold: 10  # Shut down if battery drops to 10%
 
 Step 5: Enable I2C and GPIO (Raspberry Pi)
 sudo raspi-config
@@ -65,6 +70,7 @@ Step 6: Hardware Wiring Verification
 - ADS1115 connected to I2C pins (SDA, SCL)
 - DS18B20 connected to 1-Wire pin
 - Ultrasonic sensor connected to GPIO 14 & 15
+- Analog sensors connectes to ADS1115 ADC
 - UPS HAT properly installed
 - Power supply connected
 
@@ -102,7 +108,6 @@ ras_monitoring/
 ├── ras_monitor.py          # Main monitoring application
 ├── config.yaml             # Configuration settings & thresholds
 ├── passwords.env           # API keys & device tokens (PRIVATE)
-├── passwords.env.example   # Template for environment variables
 ├── requirements.txt        # Python dependencies
 ├── ras_monitor.log         # System logs (auto-generated)
 └── LOGFILE.csv            # Sensor data records (auto-generated)
@@ -115,12 +120,6 @@ calibration:
   temperature_offset: 0.7  # Add/subtract to match reference thermometer
   ph_formula: "-6.02987 * voltage + 21.91"  # Adjust coefficients
 
-Alert Threshold Customization:
-alert_thresholds:
-  temp_low: 19.0    # Adjust low temperature alert threshold
-  temp_high: 23.0   # Adjust high temperature alert threshold
-  ph_low: 6.90      # Adjust low pH alert threshold
-  ph_high: 8.50     # Adjust high pH alert threshold
 
 SYSTEM OPERATION
 
@@ -192,7 +191,7 @@ QUICK START (5-MINUTE SETUP)
 
 1. git clone https://github.com/yourusername/RAS-monitoring.git
 2. cd RAS-monitoring
-3. cp passwords.env.example passwords.env
+3. cp passwords.env
 4. Edit passwords.env with your API keys
 5. pip install -r requirements.txt
 6. python ras_monitor.py
